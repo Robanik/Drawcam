@@ -1,101 +1,127 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ROBIKS</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ROBIKS — YouTube без рекламы</title>
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #111;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    header {
-      background: #222;
-      width: 100%;
-      text-align: center;
-      padding: 15px;
-      font-size: 24px;
-      font-weight: bold;
-      color: #ff4444;
-      letter-spacing: 2px;
-    }
-    main {
-      margin-top: 20px;
-      width: 90%;
-      max-width: 800px;
-      text-align: center;
-    }
-    input {
-      width: 70%;
-      padding: 10px;
-      border-radius: 8px;
-      border: none;
-      margin-bottom: 10px;
-    }
-    button {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 8px;
-      background: #ff4444;
-      color: #fff;
-      font-weight: bold;
-      cursor: pointer;
-      transition: 0.3s;
-    }
-    button:hover {
-      background: #ff2222;
-    }
-    iframe {
-      margin-top: 20px;
-      width: 100%;
-      height: 450px;
-      border-radius: 12px;
-      border: none;
-      box-shadow: 0 0 15px rgba(0,0,0,0.5);
-    }
+    body{font-family:Inter,system-ui,Arial;margin:0;background:#0f172a;color:#e6eef8}
+    header{background:#0b1220;padding:18px 20px;display:flex;align-items:center;gap:20px}
+    h1{margin:0;font-size:20px;letter-spacing:2px}
+    .container{padding:18px;max-width:1100px;margin:0 auto}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    input[type=text]{padding:10px;border-radius:8px;border:1px solid #223044;background:#061022;color:inherit;min-width:280px}
+    button{padding:10px 12px;border-radius:8px;border:none;background:#2563eb;color:white;cursor:pointer}
+    .sidebar{width:340px}
+    .player{flex:1;min-width:320px}
+    video{width:100%;height:420px;border-radius:12px;background:black}
+    .results{margin-top:12px;display:grid;grid-template-columns:1fr;gap:10px}
+    .result{display:flex;gap:10px;align-items:center;background:#071627;padding:8px;border-radius:8px}
+    .thumb{width:128px;height:72px;object-fit:cover;border-radius:6px}
+    .meta{flex:1}
+    @media(max-width:900px){.row{flex-direction:column}.sidebar{width:100%}}
   </style>
 </head>
 <body>
-  <header>ROBIKS</header>
-  <main>
-    <h2>Вставь ссылку на YouTube видео</h2>
-    <input type="text" id="videoUrl" placeholder="https://www.youtube.com/watch?v=...">
-    <br>
-    <button onclick="loadVideo()">Смотреть</button>
-    <div id="player"></div>
-  </main>
+  <header>
+    <h1>ROBIKS</h1>
+    <div style="color:#97b4e6;font-size:14px">YouTube без рекламы</div>
+  </header>
+
+  <div class="container">
+    <div class="row">
+      <div class="sidebar">
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="urlInput" type="text" placeholder="Вставьте ссылку на YouTube" />
+          <button id="loadUrlBtn">Открыть</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="searchInput" type="text" placeholder="Поиск по названию видео" />
+          <button id="searchBtn">Найти</button>
+        </div>
+        <div class="results" id="results"></div>
+      </div>
+
+      <div class="player">
+        <video id="player" controls autoplay></video>
+        <div id="currentTitle" style="margin-top:10px;font-weight:600"></div>
+      </div>
+    </div>
+  </div>
 
   <script>
-    function loadVideo() {
-      const url = document.getElementById("videoUrl").value;
-      const videoId = extractVideoId(url);
-      if (videoId) {
-        document.getElementById("player").innerHTML = `
-          <iframe src="https://www.youtube.com/embed/${videoId}?rel=0" allowfullscreen></iframe>
-        `;
-      } else {
-        alert("Введите правильную ссылку на YouTube видео!");
+    const API_BASE = "https://pipedapi.kavin.rocks"; // можно сменить на любой Invidious/Piped сервер
+
+    // Извлечение ID из ссылки
+    function extractVideoId(url){
+      if(!url) return null;
+      const reg = /(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+      const m = url.match(reg);
+      return m ? m[1] : null;
+    }
+
+    // Установить видео в плеер
+    async function setPlayerVideo(videoId){
+      if(!videoId) return alert("Не удалось определить ID видео");
+      try {
+        const res = await fetch(`${API_BASE}/streams/${videoId}`);
+        const data = await res.json();
+        const player = document.getElementById("player");
+        const titleBox = document.getElementById("currentTitle");
+
+        if(data.videoStreams && data.videoStreams.length > 0){
+          // берём первый доступный mp4-поток
+          const stream = data.videoStreams.find(v => v.format === "MP4" && v.quality.includes("720"))
+                        || data.videoStreams[0];
+          player.src = stream.url;
+          titleBox.textContent = data.title || "Видео";
+        } else {
+          alert("Не удалось загрузить поток видео");
+        }
+      } catch(e){
+        console.error(e);
+        alert("Ошибка при получении видео");
       }
     }
 
-    function extractVideoId(url) {
+    // Обработчики
+    document.getElementById("loadUrlBtn").addEventListener("click", ()=>{
+      const val = document.getElementById("urlInput").value.trim();
+      const vid = extractVideoId(val);
+      setPlayerVideo(vid);
+    });
+
+    document.getElementById("searchBtn").addEventListener("click", ()=>{
+      const q = document.getElementById("searchInput").value.trim();
+      if(!q) return;
+      searchVideos(q);
+    });
+
+    // Поиск через Piped API
+    async function searchVideos(query){
       try {
-        const parsedUrl = new URL(url);
-        if (parsedUrl.hostname.includes("youtube.com")) {
-          return parsedUrl.searchParams.get("v");
-        } else if (parsedUrl.hostname.includes("youtu.be")) {
-          return parsedUrl.pathname.substring(1);
+        const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}&filter=videos`);
+        const data = await res.json();
+        const results = document.getElementById("results");
+        results.innerHTML = "";
+        if(!data || data.length === 0){
+          results.innerHTML = "<div>Ничего не найдено</div>";
+          return;
         }
-      } catch (e) {
-        return null;
+        data.forEach(item=>{
+          const div = document.createElement("div"); div.className="result";
+          const img = document.createElement("img"); img.className="thumb"; img.src=item.thumbnail; 
+          const meta = document.createElement("div"); meta.className="meta"; meta.innerHTML=`<div style="font-weight:600">${item.title}</div>`;
+          const btn = document.createElement("button"); btn.textContent="▶"; 
+          btn.addEventListener("click", ()=> setPlayerVideo(item.url.split("v=")[1]));
+          div.appendChild(img); div.appendChild(meta); div.appendChild(btn);
+          results.appendChild(div);
+        });
+      } catch(e){
+        console.error(e);
+        alert("Ошибка поиска");
       }
-      return null;
     }
   </script>
 </body>
-</html>
+  </html>
