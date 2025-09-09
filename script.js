@@ -1,9 +1,10 @@
-// --- Настройка Canvas для анимации 3D квадратиков ---
+// --- Настройка Canvas для анимации 3D кубов ---
 const canvas = document.getElementById('bgCanvas');
 const ctx = canvas.getContext('2d');
 let w = canvas.width = window.innerWidth;
 let h = canvas.height = window.innerHeight;
 
+// Слушаем изменение размеров окна
 window.addEventListener('resize', () => {
   w = canvas.width = window.innerWidth;
   h = canvas.height = window.innerHeight;
@@ -11,27 +12,44 @@ window.addEventListener('resize', () => {
 
 // Генерация кубов
 const cubes = [];
-for(let i=0; i<30; i++){
+for(let i=0; i<40; i++){
   cubes.push({
     x: Math.random()*w,
     y: Math.random()*h,
     z: Math.random()*500,
     size: 20 + Math.random()*30,
-    speed: 0.5 + Math.random()
+    speed: 0.5 + Math.random(),
+    angle: Math.random()*Math.PI*2
   });
 }
 
+// Следим за курсором
+let mouse = {x: w/2, y: h/2};
+document.addEventListener('mousemove', e => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+
+// Анимация кубов
 function draw(){
   ctx.clearRect(0,0,w,h);
   for(let cube of cubes){
+    // Обновление позиции
     cube.z -= cube.speed;
-    if(cube.z<1) cube.z = 500;
+    if(cube.z < 1) cube.z = 500;
+    
+    // Проекция в 2D
     const scale = 200 / cube.z;
-    const x = (cube.x - w/2) * scale + w/2;
-    const y = (cube.y - h/2) * scale + h/2;
+    const x = (cube.x - w/2) * scale + w/2 + (mouse.x - w/2)*0.02;
+    const y = (cube.y - h/2) * scale + h/2 + (mouse.y - h/2)*0.02;
     const s = cube.size * scale;
-    ctx.fillStyle = `rgba(94,234,212,0.4)`;
-    ctx.fillRect(x - s/2, y - s/2, s, s);
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(cube.angle);
+    ctx.fillStyle = `rgba(94,234,212,0.5)`;
+    ctx.fillRect(-s/2, -s/2, s, s);
+    ctx.restore();
   }
   requestAnimationFrame(draw);
 }
@@ -79,7 +97,11 @@ function extractVideoId(urlOrId){
 
 function setPlayerVideo(videoId){
   const iframe = document.getElementById('ytPlayer');
-  if(!videoId){ iframe.src=''; document.getElementById('currentTitle').textContent=''; return; }
+  if(!videoId){ 
+    iframe.src=''; 
+    document.getElementById('currentTitle').textContent=''; 
+    return; 
+  }
   iframe.src = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`;
   if(API_KEY !== 'YOUR_API_KEY_HERE'){
     fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${API_KEY}`)
@@ -111,7 +133,10 @@ function searchYouTube(query){
     .then(r=>r.json()).then(data=>{
       const results = document.getElementById('results');
       results.innerHTML='';
-      if(!data.items || data.items.length===0){ results.innerHTML='<div>Ничего не найдено</div>'; return; }
+      if(!data.items || data.items.length===0){ 
+        results.innerHTML='<div>Ничего не найдено</div>'; 
+        return; 
+      }
       data.items.forEach(item=>{
         const vid = item.id.videoId;
         const thumb = item.snippet.thumbnails && item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : '';
@@ -131,5 +156,9 @@ function searchYouTube(query){
 }
 
 // --- Enter для поиска или загрузки ---
-document.getElementById('urlInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loadUrlBtn').click(); });
-document.getElementById('searchInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('searchBtn').click(); });
+document.getElementById('urlInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') document.getElementById('loadUrlBtn').click();
+});
+document.getElementById('searchInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') document.getElementById('searchBtn').click();
+});
