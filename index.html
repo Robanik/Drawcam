@@ -2,12 +2,14 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Hand Neon Tracker</title>
+  <title>Hand Neon Tracker 120FPS</title>
   <style>
     body {
       margin: 0;
       overflow: hidden;
       background: black;
+      font-family: Arial, sans-serif;
+      user-select: none;
     }
     canvas, video {
       position: absolute;
@@ -16,23 +18,53 @@
     }
     video {
       transform: scaleX(-1); /* зеркало */
-      display: none; /* скрыть оригинальное видео */
+      display: none;
+    }
+    #infoBtn {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      padding: 10px 20px;
+      background: rgba(255,255,255,0.1);
+      color: white;
+      border: 2px solid white;
+      border-radius: 10px;
+      cursor: pointer;
+      z-index: 10;
+      transition: 0.2s;
+    }
+    #infoBtn:hover {
+      background: rgba(255,255,255,0.3);
+    }
+    #infoText {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #0ff;
+      font-size: 24px;
+      font-weight: bold;
+      text-shadow: 0 0 10px #0ff, 0 0 20px #0ff;
+      display: none;
+      z-index: 10;
     }
   </style>
 </head>
 <body>
+  <button id="infoBtn">Инфо</button>
+  <div id="infoText">Рука должна быть на камере!</div>
   <video id="video" autoplay playsinline></video>
   <canvas id="canvas"></canvas>
 
-  <!-- MediaPipe Hands -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
 
   <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const infoBtn = document.getElementById('infoBtn');
+    const infoText = document.getElementById('infoText');
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
@@ -41,14 +73,18 @@
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // Подключаем камеру в 4К (если доступна)
+    let showInfo = false;
+    infoBtn.addEventListener('click', () => {
+      infoText.style.display = 'block';
+      showInfo = true;
+    });
+
     navigator.mediaDevices.getUserMedia({
       video: { width: 3840, height: 2160 }
     }).then(stream => {
       video.srcObject = stream;
     });
 
-    // Инициализация MediaPipe Hands
     const hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
@@ -60,48 +96,45 @@
       minTrackingConfidence: 0.7
     });
 
-    hands.onResults(draw);
+    let landmarksGlobal = null;
+    hands.onResults((results) => {
+      landmarksGlobal = (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) 
+        ? results.multiHandLandmarks[0] 
+        : null;
+    });
 
-    const camera = new Camera(video, {
+    const cameraInstance = new Camera(video, {
       onFrame: async () => {
         await hands.send({ image: video });
       },
       width: 3840,
       height: 2160
     });
-    camera.start();
+    cameraInstance.start();
 
-    let smoothLineWidth = 5; // сглаживание толщины
+    let smoothLineWidth = 5;
 
-    function draw(results) {
+    function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const landmarks = results.multiHandLandmarks[0];
-
-        // Указательный (tip = 8) и большой (tip = 4)
-        const indexTip = landmarks[8];
-        const thumbTip = landmarks[4];
+      if (landmarksGlobal) {
+        const indexTip = landmarksGlobal[8];
+        const thumbTip = landmarksGlobal[4];
 
         const x1 = indexTip.x * canvas.width;
         const y1 = indexTip.y * canvas.height;
         const x2 = thumbTip.x * canvas.width;
         const y2 = thumbTip.y * canvas.height;
 
-        // Расстояние
         const dx = x2 - x1;
         const dy = y2 - y1;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dist = Math.sqrt(dx*dx + dy*dy);
 
-        // Толщина линии (динамическая + сглаживание)
         const targetLineWidth = Math.min(Math.max(dist / 15, 3), 40);
-        smoothLineWidth += (targetLineWidth - smoothLineWidth) * 0.15;
+        smoothLineWidth += (targetLineWidth - smoothLineWidth) * 0.2;
 
-        // Красивое свечение
         ctx.shadowColor = "white";
         ctx.shadowBlur = 25;
-
-        // Рисуем линию
         ctx.strokeStyle = "white";
         ctx.lineWidth = smoothLineWidth;
         ctx.lineCap = "round";
@@ -110,20 +143,23 @@
         ctx.lineTo(x2, y2);
         ctx.stroke();
 
-        // Точки на концах
         ctx.fillStyle = "white";
         ctx.beginPath();
-        ctx.arc(x1, y1, smoothLineWidth * 1.4, 0, Math.PI * 2);
+        ctx.arc(x1, y1, smoothLineWidth * 1.4, 0, Math.PI*2);
         ctx.fill();
-
         ctx.beginPath();
-        ctx.arc(x2, y2, smoothLineWidth * 1.4, 0, Math.PI * 2);
+        ctx.arc(x2, y2, smoothLineWidth * 1.4, 0, Math.PI*2);
         ctx.fill();
-
-        // убираем тень для следующего кадра
         ctx.shadowBlur = 0;
+
+        // убираем infoText если рука видна
+        if(showInfo) infoText.style.display = 'none';
       }
+
+      requestAnimationFrame(draw);
     }
+
+    requestAnimationFrame(draw);
   </script>
 </body>
 </html>
