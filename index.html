@@ -1,121 +1,221 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>3D Hand Scanner</title>
+<title>Robiks YouTube</title>
 <style>
-  body { margin: 0; overflow: hidden; background: black; }
-  canvas { display: block; }
-  #info {
-    position: absolute;
-    bottom: 10px;
-    width: 100%;
-    text-align: center;
-    color: white;
+body {
     font-family: Arial, sans-serif;
-    font-size: 24px;
-  }
-  #scannerText {
-    position: absolute;
-    top: 20px;
-    width: 100%;
+    background: linear-gradient(to right, #1e3c72, #2a5298);
+    color: #fff;
+    margin: 0;
+    padding: 0;
+}
+header {
+    background: linear-gradient(to right, #ff416c, #ff4b2b);
+    padding: 15px;
     text-align: center;
-    color: #0f0;
-    font-family: Arial, Arial, sans-serif;
-    font-size: 28px;
-  }
+    font-size: 24px;
+    font-weight: bold;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+nav {
+    display: flex;
+    justify-content: center;
+    background: rgba(0,0,0,0.3);
+    padding: 10px;
+}
+nav button {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: #fff;
+    padding: 10px 20px;
+    margin: 0 5px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+}
+nav button:hover {
+    background: rgba(255,255,255,0.4);
+}
+.video {
+    border: 1px solid rgba(255,255,255,0.3);
+    margin: 15px;
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.4);
+}
+video {
+    max-width: 100%;
+    border-radius: 10px;
+    margin-top: 10px;
+}
+input, button {
+    margin: 5px;
+    padding: 8px;
+    border-radius: 5px;
+    border: none;
+}
+input {
+    width: 200px;
+}
+button {
+    background: #ff416c;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+}
+button:hover {
+    background: #ff4b2b;
+}
+#main {
+    max-width: 900px;
+    margin: auto;
+    padding: 20px;
+}
+.search-bar {
+    text-align: center;
+    margin-bottom: 20px;
+}
 </style>
 </head>
 <body>
-<div id="scannerText">Scanning your hand...</div>
-<div id="info">By Robanik</div>
-
-<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/controls/OrbitControls.js"></script>
-
+<header>ROBIKS</header>
+<nav id="tabs"></nav>
+<div class="search-bar">
+    <input id="search-input" placeholder="Поиск видео по названию или автору"><button onclick="searchVideos()">🔍</button>
+</div>
+<div id="main"></div>
 <script>
-// Инициализация сцены
-let scene, camera, renderer, controls;
-let scannerLine, scanProgress = 0, scanning = true;
+if(!localStorage.getItem('users')) localStorage.setItem('users', JSON.stringify({}));
+if(!localStorage.getItem('videos')) localStorage.setItem('videos', JSON.stringify([]));
+let currentUser = null;
+let likedVideos = JSON.parse(localStorage.getItem('likedVideos')||'{}');
 
-function initThree() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
+function saveUsers(users){ localStorage.setItem('users', JSON.stringify(users)); }
+function loadUsers(){ return JSON.parse(localStorage.getItem('users')); }
+function saveVideos(videos){ localStorage.setItem('videos', JSON.stringify(videos)); }
+function loadVideos(){ return JSON.parse(localStorage.getItem('videos')); }
+function saveLikedVideos(){ localStorage.setItem('likedVideos', JSON.stringify(likedVideos)); }
 
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.01, 10);
-    camera.position.z = 1;
-
-    renderer = new THREE.WebGLRenderer({antialias:true});
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.1;
-    controls.enableZoom = true;
-
-    // Лазер сканера
-    const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });
-    const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-0.5, 0, 0),
-        new THREE.Vector3(0.5, 0, 0)
-    ]);
-    scannerLine = new THREE.Line(geometry, material);
-    scene.add(scannerLine);
-}
-
-// Создаем готовую 3D руку (с простыми линиями)
-let handGroup;
-function createHandModel() {
-    handGroup = new THREE.Group();
-    const material = new THREE.LineBasicMaterial({ color: 0xffffff });
-
-    const fingerPositions = [
-        [[0,0,0],[0,0.2,0],[0,0.4,0]], // Палец 1
-        [[0.05,0,0],[0.05,0.2,0],[0.05,0.4,0]],
-        [[0.1,0,0],[0.1,0.2,0],[0.1,0.4,0]],
-        [[0.15,0,0],[0.15,0.2,0],[0.15,0.35,0]],
-        [[0.2,0,0],[0.2,0.15,0],[0.2,0.3,0]],
-    ];
-
-    fingerPositions.forEach(finger=>{
-        for(let i=0;i<finger.length-1;i++){
-            const geometry = new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(...finger[i]),
-                new THREE.Vector3(...finger[i+1])
-            ]);
-            const line = new THREE.Line(geometry, material);
-            handGroup.add(line);
-        }
-    });
-
-    scene.add(handGroup);
-}
-
-// Анимация сканера
-function animateScanner() {
-    if(scanning){
-        scanProgress += 0.01;
-        scannerLine.position.y = Math.sin(scanProgress*10)*0.3;
-        if(scanProgress > Math.PI*2){
-            scanning = false;
-            scene.remove(scannerLine);
-            createHandModel();
-        }
+function showUserPanel(){
+    const tabs = document.getElementById('tabs');
+    tabs.innerHTML = '';
+    if(currentUser){
+        const users = loadUsers();
+        tabs.innerHTML = `<button onclick='showVideos()'>Главная</button><button onclick='showUpload()'>Загрузить видео</button><button onclick='logout()'>Выйти (${currentUser}${users[currentUser].isOwner?'✔':''})</button>`;
+    } else {
+        tabs.innerHTML = `<button onclick='showRegister()'>Регистрация</button><button onclick='showLogin()'>Вход</button><button onclick='showVideos()'>Главная</button>`;
     }
 }
 
-// Главный цикл
-function animate() {
-    requestAnimationFrame(animate);
-    animateScanner();
-    controls.update();
-    renderer.render(scene,camera);
+function showRegister(){
+    document.getElementById('main').innerHTML = `
+        <h2>Регистрация</h2>
+        <input id='reg-nick' placeholder='Ник'><br>
+        <input id='reg-pass' placeholder='Пароль' type='password'><br>
+        <button onclick='register()'>Зарегистрироваться</button>
+    `;
+}
+function showLogin(){
+    document.getElementById('main').innerHTML = `
+        <h2>Вход</h2>
+        <input id='log-nick' placeholder='Ник'><br>
+        <input id='log-pass' placeholder='Пароль' type='password'><br>
+        <button onclick='login()'>Войти</button>
+    `;
+}
+function showUpload(){
+    if(!currentUser) return;
+    document.getElementById('main').innerHTML = `
+        <h2>Загрузить видео</h2>
+        <input type='file' id='video-file' accept='video/*'><br>
+        <input id='video-title' placeholder='Название видео'><br>
+        <button onclick='uploadVideo()'>Загрузить</button>
+    `;
 }
 
-initThree();
-animate();
+function showVideos(filteredVideos=null){
+    let html = '<h2>Видео</h2>';
+    const videos = filteredVideos||loadVideos();
+    const users = loadUsers();
+    videos.forEach((v,i)=>{
+        html += `<div class='video'><p>Автор: ${v.uploader} ${users[v.uploader].isOwner?'✔':''}</p>
+        <p>${v.title}</p>
+        <video controls src='${v.url}'></video>
+        <p>👍 ${v.likes} | 👎 ${v.dislikes}</p>`;
+        if(currentUser){
+            html += `<button onclick='like(${i})' ${likedVideos[currentUser]&&likedVideos[currentUser].includes(i)?'disabled':''}>👍</button>`;
+            html += `<button onclick='dislike(${i})' ${likedVideos[currentUser]&&likedVideos[currentUser].includes(i)?'disabled':''}>👎</button>`;
+            html += `<input id='cmt-${i}' placeholder='Комментарий'><button onclick='comment(${i})'>Отправить</button>`;
+            if(v.uploader===currentUser) html += `<button onclick='deleteVideo(${i})'>Удалить видео</button>`;
+        }
+        html += `<ul>${v.comments.map(c=>`<li>${c.user}: ${c.text}</li>`).join('')}</ul></div>`;
+    });
+    document.getElementById('main').innerHTML = html;
+}
+
+function register(){
+    const nick = document.getElementById('reg-nick').value;
+    const pass = document.getElementById('reg-pass').value;
+    const users = loadUsers();
+    if(users[nick]){ alert('Ник занят'); return; }
+    users[nick] = {password: pass, isOwner: nick==='ROBANIKOWNER'};
+    saveUsers(users);
+    currentUser = nick;
+    showUserPanel();
+    showVideos();
+}
+function login(){
+    const nick = document.getElementById('log-nick').value;
+    const pass = document.getElementById('log-pass').value;
+    const users = loadUsers();
+    if(users[nick] && users[nick].password===pass){
+        currentUser = nick;
+        if(!likedVideos[currentUser]) likedVideos[currentUser]=[];
+        showUserPanel();
+        showVideos();
+    } else { alert('Неверный ник или пароль'); }
+}
+function logout(){ currentUser=null; showUserPanel(); showVideos(); }
+
+function uploadVideo(){
+    const fileInput = document.getElementById('video-file');
+    const title = document.getElementById('video-title').value;
+    if(!fileInput.files[0] || !title) return;
+    const reader = new FileReader();
+    reader.onload = function(e){
+        const videos = loadVideos();
+        videos.push({uploader: currentUser, title: title, url: e.target.result, likes:0, dislikes:0, comments:[]});
+        saveVideos(videos);
+        showVideos();
+    };
+    reader.readAsDataURL(fileInput.files[0]);
+}
+
+function like(i){
+    if(!likedVideos[currentUser]) likedVideos[currentUser]=[];
+    if(likedVideos[currentUser].includes(i)) return;
+    const videos=loadVideos(); videos[i].likes++; saveVideos(videos);
+    likedVideos[currentUser].push(i); saveLikedVideos(); showVideos();
+}
+function dislike(i){
+    if(!likedVideos[currentUser]) likedVideos[currentUser]=[];
+    if(likedVideos[currentUser].includes(i)) return;
+    const videos=loadVideos(); videos[i].dislikes++; saveVideos(videos);
+    likedVideos[currentUser].push(i); saveLikedVideos(); showVideos();
+}
+function comment(i){ const text=document.getElementById('cmt-'+i).value; if(!text) return; const videos=loadVideos(); videos[i].comments.push({user:currentUser,text}); saveVideos(videos); showVideos(); }
+function deleteVideo(i){ const videos=loadVideos(); videos.splice(i,1); saveVideos(videos); showVideos(); }
+
+function searchVideos(){
+    const query = document.getElementById('search-input').value.toLowerCase();
+    const videos = loadVideos().filter(v=>v.title.toLowerCase().includes(query) || v.uploader.toLowerCase().includes(query));
+    showVideos(videos);
+}
+
+showUserPanel(); showVideos();
 </script>
 </body>
-</html>
+  </html>
+  
