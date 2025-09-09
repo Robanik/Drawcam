@@ -1,165 +1,116 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Hand Neon Tracker 120FPS</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: black;
-      font-family: Arial, sans-serif;
-      user-select: none;
-    }
-    canvas, video {
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
-    video {
-      transform: scaleX(-1); /* зеркало */
-      display: none;
-    }
-    #infoBtn {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      padding: 10px 20px;
-      background: rgba(255,255,255,0.1);
-      color: white;
-      border: 2px solid white;
-      border-radius: 10px;
-      cursor: pointer;
-      z-index: 10;
-      transition: 0.2s;
-    }
-    #infoBtn:hover {
-      background: rgba(255,255,255,0.3);
-    }
-    #infoText {
-      position: absolute;
-      top: 60px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #0ff;
-      font-size: 24px;
-      font-weight: bold;
-      text-shadow: 0 0 10px #0ff, 0 0 20px #0ff;
-      display: none;
-      z-index: 10;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>3D Hand Max Tracker</title>
+<style>
+  body { margin: 0; overflow: hidden; background: black; }
+  canvas { display: block; }
+</style>
 </head>
 <body>
-  <button id="infoBtn">Инфо</button>
-  <div id="infoText">Рука должна быть на камере!</div>
-  <video id="video" autoplay playsinline></video>
-  <canvas id="canvas"></canvas>
+<video id="video" autoplay style="display:none;"></video>
 
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
 
-  <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const infoBtn = document.getElementById('infoBtn');
-    const infoText = document.getElementById('infoText');
+<script>
+let video = document.getElementById('video');
+let scene, camera, renderer;
+let handLines = [];
+const smoothing = 0.5; // сглаживание
 
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+// Индексы костей (MediaPipe hand landmarks)
+const connections = [
+  [0,1],[1,2],[2,3],[3,4],      // Большой палец
+  [0,5],[5,6],[6,7],[7,8],      // Указательный
+  [0,9],[9,10],[10,11],[11,12], // Средний
+  [0,13],[13,14],[14,15],[15,16], // Безымянный
+  [0,17],[17,18],[18,19],[19,20] // Мизинец
+];
 
-    let showInfo = false;
-    infoBtn.addEventListener('click', () => {
-      infoText.style.display = 'block';
-      showInfo = true;
-    });
+async function setupCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+  video.srcObject = stream;
+  return new Promise(resolve => { video.onloadedmetadata = () => resolve(video); });
+}
 
-    navigator.mediaDevices.getUserMedia({
-      video: { width: 3840, height: 2160 }
-    }).then(stream => {
-      video.srcObject = stream;
-    });
+function initThree() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
 
-    const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 10);
+  camera.position.z = 0.7;
 
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7
-    });
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(3840, 2160); // 4K
+  document.body.appendChild(renderer.domElement);
 
-    let landmarksGlobal = null;
-    hands.onResults((results) => {
-      landmarksGlobal = (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) 
-        ? results.multiHandLandmarks[0] 
-        : null;
-    });
+  const material = new THREE.LineBasicMaterial({ color: 0xffffff });
+  
+  for (let i = 0; i < connections.length; i++) {
+    const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const line = new THREE.Line(geometry, material);
+    handLines.push(line);
+    scene.add(line);
+  }
+}
 
-    const cameraInstance = new Camera(video, {
-      onFrame: async () => {
-        await hands.send({ image: video });
-      },
-      width: 3840,
-      height: 2160
-    });
-    cameraInstance.start();
+// Сглаживание
+function smoothPosition(oldPos, newPos, alpha=smoothing) {
+  return oldPos.map((v, i) => v*(1-alpha) + newPos[i]*alpha);
+}
 
-    let smoothLineWidth = 5;
+async function main() {
+  await setupCamera();
+  video.play();
+  initThree();
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const model = await handpose.load();
+  const oldPositions = Array(21).fill([0,0,0]);
 
-      if (landmarksGlobal) {
-        const indexTip = landmarksGlobal[8];
-        const thumbTip = landmarksGlobal[4];
+  async function animate() {
+    requestAnimationFrame(animate);
 
-        const x1 = indexTip.x * canvas.width;
-        const y1 = indexTip.y * canvas.height;
-        const x2 = thumbTip.x * canvas.width;
-        const y2 = thumbTip.y * canvas.height;
+    const predictions = await model.estimateHands(video, true);
 
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const dist = Math.sqrt(dx*dx + dy*dy);
+    if (predictions.length > 0) {
+      const landmarks = predictions[0].landmarks;
 
-        const targetLineWidth = Math.min(Math.max(dist / 15, 3), 40);
-        smoothLineWidth += (targetLineWidth - smoothLineWidth) * 0.2;
-
-        ctx.shadowColor = "white";
-        ctx.shadowBlur = 25;
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = smoothLineWidth;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-
-        ctx.fillStyle = "white";
-        ctx.beginPath();
-        ctx.arc(x1, y1, smoothLineWidth * 1.4, 0, Math.PI*2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(x2, y2, smoothLineWidth * 1.4, 0, Math.PI*2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // убираем infoText если рука видна
-        if(showInfo) infoText.style.display = 'none';
+      // Сглаживание координат
+      for (let i=0;i<21;i++){
+        const smoothed = smoothPosition(oldPositions[i], landmarks[i]);
+        oldPositions[i] = smoothed;
       }
 
-      requestAnimationFrame(draw);
+      // Обновляем линии
+      for (let i=0;i<connections.length;i++){
+        const [a,b] = connections[i];
+        const line = handLines[i];
+        const positions = line.geometry.attributes.position.array;
+
+        positions[0] = (oldPositions[a][0]-640)/640; // нормализация X
+        positions[1] = -(oldPositions[a][1]-360)/360; // нормализация Y
+        positions[2] = -oldPositions[a][2]/200; // Z глубина
+
+        positions[3] = (oldPositions[b][0]-640)/640;
+        positions[4] = -(oldPositions[b][1]-360)/360;
+        positions[5] = -oldPositions[b][2]/200;
+
+        line.geometry.attributes.position.needsUpdate = true;
+      }
     }
 
-    requestAnimationFrame(draw);
-  </script>
+    renderer.render(scene, camera);
+  }
+
+  animate();
+}
+
+main();
+</script>
 </body>
 </html>
