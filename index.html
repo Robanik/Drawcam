@@ -21,126 +21,101 @@
     width: 100%;
     text-align: center;
     color: #0f0;
-    font-family: Arial, sans-serif;
+    font-family: Arial, Arial, sans-serif;
     font-size: 28px;
   }
 </style>
 </head>
 <body>
-<video id="video" autoplay style="display:none;"></video>
-<div id="info">By Robanik</div>
 <div id="scannerText">Scanning your hand...</div>
+<div id="info">By Robanik</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
 
 <script>
-let video = document.getElementById('video');
+// Инициализация сцены
 let scene, camera, renderer, controls;
-let handLines = [];
-const smoothing = 0.5;
-const connections = [
-  [0,1],[1,2],[2,3],[3,4],
-  [0,5],[5,6],[6,7],[7,8],
-  [0,9],[9,10],[10,11],[11,12],
-  [0,13],[13,14],[14,15],[15,16],
-  [0,17],[17,18],[18,19],[19,20]
-];
-
-async function setupCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
-  video.srcObject = stream;
-  return new Promise(resolve => { video.onloadedmetadata = () => resolve(video); });
-}
+let scannerLine, scanProgress = 0, scanning = true;
 
 function initThree() {
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000);
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
 
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.01, 10);
-  camera.position.z = 0.7;
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.01, 10);
+    camera.position.z = 1;
 
-  renderer = new THREE.WebGLRenderer({ antialias:true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
+    renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-  controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.1;
-  controls.enableZoom = true;
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+    controls.enableZoom = true;
 
-  const material = new THREE.LineBasicMaterial({ color: 0xffffff });
-  for (let i=0;i<connections.length;i++){
-    const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-    const line = new THREE.Line(geometry, material);
-    handLines.push(line);
-    scene.add(line);
-  }
+    // Лазер сканера
+    const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-0.5, 0, 0),
+        new THREE.Vector3(0.5, 0, 0)
+    ]);
+    scannerLine = new THREE.Line(geometry, material);
+    scene.add(scannerLine);
 }
 
-function smoothPosition(oldPos,newPos,alpha=smoothing){
-  return oldPos.map((v,i)=>v*(1-alpha)+newPos[i]*alpha);
-}
+// Создаем готовую 3D руку (с простыми линиями)
+let handGroup;
+function createHandModel() {
+    handGroup = new THREE.Group();
+    const material = new THREE.LineBasicMaterial({ color: 0xffffff });
 
-async function main() {
-  await setupCamera();
-  video.play();
-  initThree();
+    const fingerPositions = [
+        [[0,0,0],[0,0.2,0],[0,0.4,0]], // Палец 1
+        [[0.05,0,0],[0.05,0.2,0],[0.05,0.4,0]],
+        [[0.1,0,0],[0.1,0.2,0],[0.1,0.4,0]],
+        [[0.15,0,0],[0.15,0.2,0],[0.15,0.35,0]],
+        [[0.2,0,0],[0.2,0.15,0],[0.2,0.3,0]],
+    ];
 
-  const model = await handpose.load();
-  const oldPositions = Array(21).fill([0,0,0]);
-  const scannerText = document.getElementById('scannerText');
-
-  let scanned = false;
-  let scanFrames = 0;
-  const scanRequired = 50; // сколько кадров для сканирования
-
-  async function animate(){
-    requestAnimationFrame(animate);
-
-    const predictions = await model.estimateHands(video,true);
-    if(predictions.length>0){
-      const landmarks = predictions[0].landmarks;
-      for(let i=0;i<21;i++){
-        const smoothed = smoothPosition(oldPositions[i],landmarks[i]);
-        oldPositions[i]=smoothed;
-      }
-
-      if(!scanned){
-        scanFrames++;
-        scannerText.innerText = `Scanning your hand... ${Math.floor(scanFrames/scanRequired*100)}%`;
-        if(scanFrames>=scanRequired){
-          scanned = true;
-          scannerText.style.display='none';
+    fingerPositions.forEach(finger=>{
+        for(let i=0;i<finger.length-1;i++){
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(...finger[i]),
+                new THREE.Vector3(...finger[i+1])
+            ]);
+            const line = new THREE.Line(geometry, material);
+            handGroup.add(line);
         }
-      }
+    });
 
-      for(let i=0;i<connections.length;i++){
-        const [a,b]=connections[i];
-        const line=handLines[i];
-        const pos=line.geometry.attributes.position.array;
-        pos[0]=(oldPositions[a][0]-640)/640;
-        pos[1]=-(oldPositions[a][1]-360)/360;
-        pos[2]=-oldPositions[a][2]/200;
-        pos[3]=(oldPositions[b][0]-640)/640;
-        pos[4]=-(oldPositions[b][1]-360)/360;
-        pos[5]=-oldPositions[b][2]/200;
-        line.geometry.attributes.position.needsUpdate=true;
-      }
+    scene.add(handGroup);
+}
+
+// Анимация сканера
+function animateScanner() {
+    if(scanning){
+        scanProgress += 0.01;
+        scannerLine.position.y = Math.sin(scanProgress*10)*0.3;
+        if(scanProgress > Math.PI*2){
+            scanning = false;
+            scene.remove(scannerLine);
+            createHandModel();
+        }
     }
+}
 
+// Главный цикл
+function animate() {
+    requestAnimationFrame(animate);
+    animateScanner();
     controls.update();
     renderer.render(scene,camera);
-  }
-
-  animate();
 }
 
-main();
+initThree();
+animate();
 </script>
 </body>
-  </html>
+</html>
