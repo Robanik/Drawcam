@@ -81,7 +81,7 @@ document.getElementById('navSettings').addEventListener('click', () => {
 });
 
 // --- YouTube player ---
-const API_KEY = 'YOUR_API_KEY_HERE';
+const API_KEY = 'AIzaSyCgL1GFZltpURrlV_U2DWyH-8XT_h6tr8U';
 
 function extractVideoId(urlOrId){
   if(!urlOrId) return null;
