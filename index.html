@@ -1,144 +1,88 @@
-<!--
-ROBIKS — ЛЕГАЛЬНЫЙ ВЕБ-ПРОЕКТ ДЛЯ ПОИСКА И ПРОСМОТРА ВИДЕО С YOUTUBE
-Важное: этот проект НЕ УДАЛЯЕТ рекламу и не обходит правила YouTube.
-Чтобы легально смотреть видео без рекламы, используйте YouTube Premium.
-
-ИНСТРУКЦИЯ:
-1) Получите API-ключ Google YouTube Data API v3: https://console.developers.google.com/
-2) Вставьте ключ в переменную `API_KEY` ниже.
-3) Откройте этот файл в браузере (или разместите на сервере).
-
-Функции:
-- Вставить ссылку на видео — проигрывается в iframe (официальный плеер YouTube).
-- Искать по названию — показывает результаты поиска (через YouTube Data API) и позволяет воспроизводить выбранное видео.
-- В шапке страницы написано ROBIKS.
---><!doctype html>
-
+<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ROBIKS — YouTube Viewer</title>
+  <title>ROBIKS — Viewer</title>
   <style>
-    body{font-family:Inter,system-ui,Arial;margin:0;background:#0f172a;color:#e6eef8}
-    header{background:#0b1220;padding:18px 20px;display:flex;align-items:center;gap:20px}
-    h1{margin:0;font-size:20px;letter-spacing:2px}
+    body{font-family:Inter,system-ui,Arial;margin:0;background:#0f172a;color:#e6eef8;overflow:hidden}
+    header{background:#0b1220;padding:18px 20px;display:flex;align-items:center;justify-content:space-between}
+    h1{margin:0;font-size:22px;letter-spacing:3px}
+    h1 small{display:block;font-size:12px;color:#7f9ccf;font-weight:400;margin-top:4px}
+    .menu-btn{cursor:pointer;font-size:22px}
+    .sidebar{position:fixed;top:0;left:-260px;width:240px;height:100%;background:#111c34;transition:all .3s;padding:20px;box-shadow:2px 0 8px #0008;z-index:99}
+    .sidebar.active{left:0}
+    .sidebar h2{font-size:16px;margin-bottom:20px}
+    .sidebar button{display:block;width:100%;margin-bottom:10px;padding:10px;border-radius:8px;background:#2563eb;border:none;color:#fff;cursor:pointer}
     .container{padding:18px;max-width:1100px;margin:0 auto}
     .row{display:flex;gap:12px;flex-wrap:wrap}
     input[type=text]{padding:10px;border-radius:8px;border:1px solid #223044;background:#061022;color:inherit;min-width:280px}
     button{padding:10px 12px;border-radius:8px;border:none;background:#2563eb;color:white;cursor:pointer}
-    .sidebar{width:340px}
     .player{flex:1;min-width:320px}
     iframe{width:100%;height:420px;border-radius:12px;border:0;background:black}
     .results{margin-top:12px;display:grid;grid-template-columns:1fr;gap:10px}
     .result{display:flex;gap:10px;align-items:center;background:#071627;padding:8px;border-radius:8px}
     .thumb{width:128px;height:72px;object-fit:cover;border-radius:6px}
     .meta{flex:1}
-    .note{font-size:13px;color:#9fb2d6;margin-top:10px}
-    @media(max-width:900px){.row{flex-direction:column}.sidebar{width:100%}}
+    /* стартовое меню */
+    #startScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200}
+    #startScreen h1{font-size:42px;letter-spacing:6px;margin-bottom:20px;position:relative}
+    #startScreen h1 span{display:block;font-size:14px;color:#7f9ccf;margin-top:6px}
+    .squares{display:flex;gap:10px;margin:30px}
+    .square{width:20px;height:20px;background:#2563eb;border-radius:4px;transition:transform .2s}
+    #startBtn{padding:14px 22px;font-size:16px;border-radius:10px;background:#2563eb;border:none;color:#fff;cursor:pointer;transition:.2s}
+    #startBtn:hover{background:#1d4ed8}
   </style>
 </head>
 <body>
+  <!-- Стартовое меню -->
+  <div id="startScreen">
+    <h1>ROBIKS <span>BY ROBANIK</span></h1>
+    <div class="squares">
+      <div class="square"></div>
+      <div class="square"></div>
+      <div class="square"></div>
+    </div>
+    <button id="startBtn">НАЧАТЬ ПРОСМОТР</button>
+  </div>
+
+  <!-- Боковое меню -->
+  <div class="sidebar" id="sidebar">
+    <h2>Меню</h2>
+    <button onclick="openHome()">Home</button>
+    <button onclick="openSettings()">Settings</button>
+  </div>
+
+  <!-- Основное окно -->
   <header>
-    <h1>ROBIKS</h1>
-    <div style="color:#97b4e6;font-size:14px">просмотр и поиск YouTube — без рекламы</div>
-  </header>  <div class="container">
+    <div>
+      <h1>ROBIKS <small>BY ROBANIK</small></h1>
+    </div>
+    <div class="menu-btn" onclick="toggleSidebar()">|||</div>
+  </header>
+
+  <div class="container" id="mainContent" style="display:none">
     <div class="row">
-      <div class="sidebar">
+      <div class="sidebar-tools">
         <div style="display:flex;gap:8px;margin-bottom:10px">
-          <input id="urlInput" type="text" placeholder="Вставьте ссылку на YouTube (или оставьте пустым)" />
+          <input id="urlInput" type="text" placeholder="Вставьте ссылку на YouTube (или ID)" />
           <button id="loadUrlBtn">Открыть</button>
-        </div><div style="display:flex;gap:8px;margin-bottom:10px">
-      <input id="searchInput" type="text" placeholder="Поиск по названию видео" />
-      <button id="searchBtn">Найти</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="searchInput" type="text" placeholder="Поиск по названию видео" />
+          <button id="searchBtn">Найти</button>
+        </div>
+        <div class="results" id="results"></div>
+      </div>
+      <div class="player">
+        <div id="playerWrapper">
+          <iframe id="ytPlayer" src="" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+        <div id="currentTitle" style="margin-top:10px;font-weight:600"></div>
+      </div>
     </div>
-
-    <div class="note">Примечание: реклама контролируется YouTube / правообладателями и не удаляется этим сайтом.</div>
-
-    <div class="results" id="results"></div>
   </div>
 
-  <div class="player">
-    <div id="playerWrapper">
-      <!-- Плеер YouTube -->
-      <iframe id="ytPlayer" src="" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-    </div>
-    <div id="currentTitle" style="margin-top:10px;font-weight:600"></div>
-  </div>
-</div>
-
-  </div>  <script>
-    // ВАЖНО: вставьте сюда ваш действующий YouTube Data API v3 ключ
-    const API_KEY = 'AIzaSyCgL1GFZltpURrlV_U2DWyH-8XT_h6tr8U';
-
-    // Вспомогательные функции
-    function extractVideoId(urlOrId) {
-      if(!urlOrId) return null;
-      // Если это уже id (11 символов или более), аккуратно вернуть
-      const idRegex = /([a-zA-Z0-9_-]{11})/;
-      const match = urlOrId.match(idRegex);
-      return match ? match[1] : null;
-    }
-
-    function setPlayerVideo(videoId) {
-      const iframe = document.getElementById('ytPlayer');
-      if(!videoId){ iframe.src=''; document.getElementById('currentTitle').textContent=''; return; }
-      iframe.src = `https://www.youtube.com/embed/${videoId}?rel=0`; // стандартный встраиваемый плеер
-
-      // Загрузим краткий заголовок (optional)
-      if(API_KEY && API_KEY !== 'YOUR_API_KEY_HERE'){
-        fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${API_KEY}`)
-          .then(r=>r.json()).then(data=>{
-            if(data.items && data.items[0]) document.getElementById('currentTitle').textContent = data.items[0].snippet.title;
-          }).catch(()=>{});
-      }
-    }
-
-    // Обработчики
-    document.getElementById('loadUrlBtn').addEventListener('click', ()=>{
-      const val = document.getElementById('urlInput').value.trim();
-      const vid = extractVideoId(val);
-      if(vid) setPlayerVideo(vid); else alert('Не удалось извлечь ID видео из ссылки. Убедитесь, что вставлена ссылка YouTube.');
-    });
-
-    document.getElementById('searchBtn').addEventListener('click', ()=>{
-      const q = document.getElementById('searchInput').value.trim();
-      if(!q) return alert('Введите поисковый запрос.');
-      if(!API_KEY || API_KEY==='YOUR_API_KEY_HERE') return alert('Введите API_KEY в коде, чтобы включить поиск.');
-      searchYouTube(q);
-    });
-
-    function searchYouTube(query){
-      const encoded = encodeURIComponent(query);
-      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&q=${encoded}&key=${API_KEY}`;
-      fetch(url).then(r=>r.json()).then(data=>{
-        const results = document.getElementById('results');
-        results.innerHTML='';
-        if(!data.items || data.items.length===0){ results.innerHTML='<div class="note">Ничего не найдено</div>'; return; }
-        data.items.forEach(item=>{
-          const vid = item.id.videoId;
-          const thumb = item.snippet.thumbnails && item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : '';
-          const title = item.snippet.title;
-
-          const div = document.createElement('div'); div.className='result';
-          const img = document.createElement('img'); img.className='thumb'; img.src = thumb; img.alt='thumb';
-          const meta = document.createElement('div'); meta.className='meta';
-          meta.innerHTML = `<div style="font-weight:600">${title}</div><div style="font-size:13px;color:#9fb2d6">ID: ${vid}</div>`;
-          const playBtn = document.createElement('button'); playBtn.textContent='Play';
-          playBtn.addEventListener('click', ()=> setPlayerVideo(vid));
-
-          div.appendChild(img); div.appendChild(meta); div.appendChild(playBtn);
-          results.appendChild(div);
-        });
-      }).catch(err=>{ console.error(err); alert('Ошибка поиска. Проверьте API_KEY и сетевое соединение.'); });
-    }
-
-    // Поддержка автозапуска, если в URL передан ?v=ID
-    (function(){
-      const params = new URLSearchParams(window.location.search);
-      const v = params.get('v');
-      if(v) setPlayerVideo(v);
-    })();
-
-  </script></body>
-</html>
+  <script src="script.js"></script>
+</body>
+  </html>
