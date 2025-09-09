@@ -5,25 +5,35 @@
   <title>Finger Drawing</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
-    video, canvas {
+    video {
+      display: none; /* камеру скрываем */
+    }
+    canvas {
       position: absolute;
       top: 0; left: 0;
-      width: 100%; height: 100%;
-      object-fit: cover;
+      width: 100vw; height: 100vh;
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 </head>
 <body>
   <video class="input_video" autoplay muted playsinline></video>
   <canvas class="output_canvas"></canvas>
+  <canvas class="draw_canvas"></canvas>
 
   <script>
     const videoElement = document.querySelector('.input_video');
-    const canvasElement = document.querySelector('.output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
+    const outputCanvas = document.querySelector('.output_canvas');
+    const drawCanvas = document.querySelector('.draw_canvas');
+
+    // канвас для камеры и кружков
+    const outCtx = outputCanvas.getContext('2d');
+    // канвас для постоянных линий
+    const drawCtx = drawCanvas.getContext('2d');
+
+    outputCanvas.width = drawCanvas.width = window.innerWidth;
+    outputCanvas.height = drawCanvas.height = window.innerHeight;
 
     let drawing = false;
     let lastX, lastY;
@@ -44,45 +54,61 @@
     });
 
     hands.onResults(results => {
-      canvasCtx.save();
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+      outCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
 
       if (results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
 
-        // большой (4) и указательный (8)
-        const thumb = landmarks[4];
-        const index = landmarks[8];
+        const thumb = landmarks[4];  // большой палец
+        const index = landmarks[8];  // указательный палец
 
         const d = distance(thumb, index);
 
-        if (d < 0.05) { // пальцы касаются
-          const x = index.x * canvasElement.width;
-          const y = index.y * canvasElement.height;
+        // координаты
+        const x = index.x * outputCanvas.width;
+        const y = index.y * outputCanvas.height;
+
+        const tx = thumb.x * outputCanvas.width;
+        const ty = thumb.y * outputCanvas.height;
+
+        // рисуем кружочки и соединяем линией (для красоты)
+        outCtx.beginPath();
+        outCtx.arc(x, y, 10, 0, Math.PI * 2);
+        outCtx.arc(tx, ty, 10, 0, Math.PI * 2);
+        outCtx.fillStyle = "rgba(255,255,255,0.7)";
+        outCtx.fill();
+
+        outCtx.beginPath();
+        outCtx.moveTo(tx, ty);
+        outCtx.lineTo(x, y);
+        outCtx.strokeStyle = "rgba(255,255,255,0.5)";
+        outCtx.lineWidth = 3;
+        outCtx.stroke();
+
+        if (d < 0.05) { // пальцы почти касаются
           if (!drawing) {
             drawing = true;
             lastX = x; lastY = y;
           }
-          canvasCtx.beginPath();
-          canvasCtx.moveTo(lastX, lastY);
-          canvasCtx.lineTo(x, y);
-          canvasCtx.strokeStyle = 'red';
-          canvasCtx.lineWidth = 5;
-          canvasCtx.stroke();
+          drawCtx.beginPath();
+          drawCtx.moveTo(lastX, lastY);
+          drawCtx.lineTo(x, y);
+          drawCtx.strokeStyle = 'white';
+          drawCtx.lineWidth = 2; // тонкая
+          drawCtx.stroke();
           lastX = x; lastY = y;
         } else {
           drawing = false;
         }
       }
-      canvasCtx.restore();
     });
 
     const camera = new Camera(videoElement, {
       onFrame: async () => {
         await hands.send({image: videoElement});
       },
-      width: 1280,
-      height: 720
+      width: 1920, // HD
+      height: 1080
     });
     camera.start();
   </script>
