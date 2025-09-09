@@ -2,46 +2,53 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Finger Drawing</title>
+  <title>Hand Neon Tracker</title>
   <style>
-    body { margin: 0; overflow: hidden; background: black; }
-    video {
-      display: none; /* камеру скрываем */
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
     }
-    canvas {
+    canvas, video {
       position: absolute;
-      top: 0; left: 0;
-      width: 100vw; height: 100vh;
+      top: 0;
+      left: 0;
+    }
+    video {
+      transform: scaleX(-1); /* зеркало */
+      display: none; /* скрыть оригинальное видео */
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 </head>
 <body>
-  <video class="input_video" autoplay muted playsinline></video>
-  <canvas class="output_canvas"></canvas>
-  <canvas class="draw_canvas"></canvas>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+
+  <!-- MediaPipe Hands -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
 
   <script>
-    const videoElement = document.querySelector('.input_video');
-    const outputCanvas = document.querySelector('.output_canvas');
-    const drawCanvas = document.querySelector('.draw_canvas');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
 
-    // канвас для камеры и кружков
-    const outCtx = outputCanvas.getContext('2d');
-    // канвас для постоянных линий
-    const drawCtx = drawCanvas.getContext('2d');
-
-    outputCanvas.width = drawCanvas.width = window.innerWidth;
-    outputCanvas.height = drawCanvas.height = window.innerHeight;
-
-    let drawing = false;
-    let lastX, lastY;
-
-    function distance(a, b) {
-      return Math.hypot(a.x - b.x, a.y - b.y);
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
     }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
+    // Подключаем камеру в 4К (если доступна)
+    navigator.mediaDevices.getUserMedia({
+      video: { width: 3840, height: 2160 }
+    }).then(stream => {
+      video.srcObject = stream;
+    });
+
+    // Инициализация MediaPipe Hands
     const hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
@@ -53,64 +60,70 @@
       minTrackingConfidence: 0.7
     });
 
-    hands.onResults(results => {
-      outCtx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+    hands.onResults(draw);
 
-      if (results.multiHandLandmarks.length > 0) {
-        const landmarks = results.multiHandLandmarks[0];
-
-        const thumb = landmarks[4];  // большой палец
-        const index = landmarks[8];  // указательный палец
-
-        const d = distance(thumb, index);
-
-        // координаты
-        const x = index.x * outputCanvas.width;
-        const y = index.y * outputCanvas.height;
-
-        const tx = thumb.x * outputCanvas.width;
-        const ty = thumb.y * outputCanvas.height;
-
-        // рисуем кружочки и соединяем линией (для красоты)
-        outCtx.beginPath();
-        outCtx.arc(x, y, 10, 0, Math.PI * 2);
-        outCtx.arc(tx, ty, 10, 0, Math.PI * 2);
-        outCtx.fillStyle = "rgba(255,255,255,0.7)";
-        outCtx.fill();
-
-        outCtx.beginPath();
-        outCtx.moveTo(tx, ty);
-        outCtx.lineTo(x, y);
-        outCtx.strokeStyle = "rgba(255,255,255,0.5)";
-        outCtx.lineWidth = 3;
-        outCtx.stroke();
-
-        if (d < 0.05) { // пальцы почти касаются
-          if (!drawing) {
-            drawing = true;
-            lastX = x; lastY = y;
-          }
-          drawCtx.beginPath();
-          drawCtx.moveTo(lastX, lastY);
-          drawCtx.lineTo(x, y);
-          drawCtx.strokeStyle = 'white';
-          drawCtx.lineWidth = 2; // тонкая
-          drawCtx.stroke();
-          lastX = x; lastY = y;
-        } else {
-          drawing = false;
-        }
-      }
-    });
-
-    const camera = new Camera(videoElement, {
+    const camera = new Camera(video, {
       onFrame: async () => {
-        await hands.send({image: videoElement});
+        await hands.send({ image: video });
       },
-      width: 1920, // HD
-      height: 1080
+      width: 3840,
+      height: 2160
     });
     camera.start();
+
+    let smoothLineWidth = 5; // сглаживание толщины
+
+    function draw(results) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+
+        // Указательный (tip = 8) и большой (tip = 4)
+        const indexTip = landmarks[8];
+        const thumbTip = landmarks[4];
+
+        const x1 = indexTip.x * canvas.width;
+        const y1 = indexTip.y * canvas.height;
+        const x2 = thumbTip.x * canvas.width;
+        const y2 = thumbTip.y * canvas.height;
+
+        // Расстояние
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // Толщина линии (динамическая + сглаживание)
+        const targetLineWidth = Math.min(Math.max(dist / 15, 3), 40);
+        smoothLineWidth += (targetLineWidth - smoothLineWidth) * 0.15;
+
+        // Красивое свечение
+        ctx.shadowColor = "white";
+        ctx.shadowBlur = 25;
+
+        // Рисуем линию
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = smoothLineWidth;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        // Точки на концах
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(x1, y1, smoothLineWidth * 1.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x2, y2, smoothLineWidth * 1.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // убираем тень для следующего кадра
+        ctx.shadowBlur = 0;
+      }
+    }
   </script>
 </body>
 </html>
