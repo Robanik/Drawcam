@@ -146,10 +146,10 @@ header {
   max-width: 1400px;
 }
 
-/* --- ПК адаптив --- */
+/* --- Адаптивность --- */
 @media (min-width: 768px) {
   .layout {
-    flex-direction: column; /* сверху панель, снизу видео */
+    flex-direction: column; /* можно сделать row если нужно */
   }
 }
 
@@ -251,13 +251,11 @@ input[type="text"]::placeholder {
 .sidepanel {
   position: fixed;
   top: 0;
-  right: -320px; /* изначально скрыта */
+  right: -350px; /* полностью скрыта */
   width: 300px;
   height: 100%;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0,0,0,0.85);
   backdrop-filter: blur(12px);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: -5px 0 20px rgba(0, 0, 0, 0.5);
   transition: right 0.4s ease;
   z-index: 200;
   display: flex;
@@ -296,7 +294,6 @@ input[type="text"]::placeholder {
   display: flex;
   flex-direction: column;
   gap: 15px;
-  color: #fff;
   overflow-y: auto;
 }
 
@@ -338,24 +335,27 @@ input[type="text"]::placeholder {
   gap: 10px;
 }
 
-#panelSettings input, #panelSettings select {
-  padding: 8px 10px;
+.setting {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: rgba(255,255,255,0.05);
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.setting input[type="range"], .setting select {
+  width: 100%;
   border-radius: 8px;
   border: none;
+  padding: 5px;
   background: rgba(255,255,255,0.1);
-  color: #fff;
   outline: none;
 }
 
-#panelSettings label {
-  font-size: 0.9rem;
-  margin-bottom: 4px;
-  color: #5eead4;
-}
-
-/* --- Адаптивность --- */
+/* --- Адаптивность панели --- */
 @media (max-width: 768px) {
   .sidepanel {
     width: 80%;
   }
-                              }
+  }
