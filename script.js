@@ -1,121 +1,135 @@
-// ====== КЛИЕНТСКИЙ JS ДЛЯ ROBIKS ======
+// --- Настройка Canvas для анимации 3D квадратиков ---
+const canvas = document.getElementById('bgCanvas');
+const ctx = canvas.getContext('2d');
+let w = canvas.width = window.innerWidth;
+let h = canvas.height = window.innerHeight;
 
-// Ссылки на элементы
-const startScreen = document.getElementById("startScreen");
-const startBtn = document.getElementById("startBtn");
-const squares = document.querySelectorAll(".square");
-const mainContent = document.getElementById("mainContent");
-const sidebar = document.getElementById("sidebar");
-const menuBtn = document.querySelector(".menu-btn");
-const urlInput = document.getElementById("urlInput");
-const loadUrlBtn = document.getElementById("loadUrlBtn");
-const searchInput = document.getElementById("searchInput");
-const searchBtn = document.getElementById("searchBtn");
-const resultsContainer = document.getElementById("results");
-const playerIframe = document.getElementById("ytPlayer");
-const currentTitle = document.getElementById("currentTitle");
-
-// Настройки
-let settings = {
-  fps: 60,
-  mbps: 50,
-  quality: "720p"
-};
-
-// ====== СТАРТОВОЕ МЕНЮ ======
-startBtn.addEventListener("click", () => {
-  startScreen.style.display = "none";
-  mainContent.style.display = "block";
+window.addEventListener('resize', () => {
+  w = canvas.width = window.innerWidth;
+  h = canvas.height = window.innerHeight;
 });
 
-document.addEventListener("mousemove", e => {
-  squares.forEach(sq => {
-    const rect = sq.getBoundingClientRect();
-    const dx = e.clientX - (rect.left + rect.width/2);
-    const dy = e.clientY - (rect.top + rect.height/2);
-    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-    sq.style.transform = `rotate(${angle}deg)`;
+// Генерация кубов
+const cubes = [];
+for(let i=0; i<30; i++){
+  cubes.push({
+    x: Math.random()*w,
+    y: Math.random()*h,
+    z: Math.random()*500,
+    size: 20 + Math.random()*30,
+    speed: 0.5 + Math.random()
   });
+}
+
+function draw(){
+  ctx.clearRect(0,0,w,h);
+  for(let cube of cubes){
+    cube.z -= cube.speed;
+    if(cube.z<1) cube.z = 500;
+    const scale = 200 / cube.z;
+    const x = (cube.x - w/2) * scale + w/2;
+    const y = (cube.y - h/2) * scale + h/2;
+    const s = cube.size * scale;
+    ctx.fillStyle = `rgba(94,234,212,0.4)`;
+    ctx.fillRect(x - s/2, y - s/2, s, s);
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+
+// --- Кнопка НАЧАТЬ ПРОСМОТР ---
+const startBtn = document.getElementById('startWatch');
+const startScreen = document.getElementById('startScreen');
+const mainInterface = document.getElementById('mainInterface');
+
+startBtn.addEventListener('click', () => {
+  startScreen.classList.add('hidden');
+  mainInterface.classList.remove('hidden');
 });
 
-// ====== БОКОВАЯ ПАНЕЛЬ ======
-function toggleSidebar() {
-  sidebar.classList.toggle("active");
-}
-menuBtn.addEventListener("click", toggleSidebar);
+// --- Боковая панель ---
+const panel = document.getElementById('sidepanel');
+document.getElementById('openPanel').addEventListener('click', () => panel.classList.add('open'));
+document.getElementById('closePanel').addEventListener('click', () => panel.classList.remove('open'));
 
-function openHome() {
-  alert("Home: Здесь будет главный интерфейс");
-}
-
-function openSettings() {
-  let newFPS = prompt("FPS (35-120)", settings.fps);
-  let newMBPS = prompt("Mbps (20-120)", settings.mbps);
-  let newQuality = prompt("Качество (144p - 4k)", settings.quality);
-  if(newFPS) settings.fps = Math.min(120, Math.max(35, parseInt(newFPS)));
-  if(newMBPS) settings.mbps = Math.min(120, Math.max(20, parseInt(newMBPS)));
-  if(newQuality) settings.quality = newQuality;
-  alert(`Настройки обновлены:\nFPS: ${settings.fps}\nMbps: ${settings.mbps}\nКачество: ${settings.quality}`);
-}
-
-// ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======
-function setPlayerVideo(videoId) {
-  fetch(`/video/${videoId}`)
-    .then(res => res.json())
-    .then(data => {
-      if(data.url){
-        playerIframe.src = data.url + `?autoplay=1`;
-        currentTitle.textContent = data.id;
-      } else {
-        alert("Не удалось получить видео");
-      }
-    })
-    .catch(()=>alert("Ошибка сервера"));
-}
-
-// ====== ЗАГРУЗКА ПО ID/ССЫЛКЕ ======
-loadUrlBtn.addEventListener("click", () => {
-  const val = urlInput.value.trim();
-  if(!val) return alert("Введите ссылку или ID видео");
-  let id = val.match(/([a-zA-Z0-9_-]{11})/)?.[1] || val;
-  setPlayerVideo(id);
+// --- Навигация вкладок панели ---
+document.getElementById('navHome').addEventListener('click', () => {
+  document.getElementById('panelHome').classList.remove('hidden');
+  document.getElementById('panelSettings').classList.add('hidden');
+});
+document.getElementById('navSettings').addEventListener('click', () => {
+  document.getElementById('panelHome').classList.add('hidden');
+  document.getElementById('panelSettings').classList.remove('hidden');
 });
 
-// ====== ПОИСК ВИДЕО ======
-searchBtn.addEventListener("click", () => {
-  const query = searchInput.value.trim();
-  if(!query) return alert("Введите поисковый запрос");
-  fetch(`/search?q=${encodeURIComponent(query)}`)
-    .then(res => res.json())
-    .then(data => {
-      resultsContainer.innerHTML = "";
-      if(!data || !data.length) {
-        resultsContainer.innerHTML = "<div>Ничего не найдено</div>";
-        return;
-      }
-      data.forEach(v => {
-        const div = document.createElement("div");
-        div.className = "result";
-        const img = document.createElement("img");
-        img.src = v.thumbnail; img.className = "thumb";
-        const meta = document.createElement("div");
-        meta.className = "meta";
-        meta.innerHTML = `<div style="font-weight:600">${v.title}</div><div style="font-size:13px;color:#9fb2d6">ID: ${v.id}</div>`;
-        const playBtn = document.createElement("button");
-        playBtn.textContent = "Play";
-        playBtn.addEventListener("click", ()=> setPlayerVideo(v.id));
-        div.appendChild(img);
-        div.appendChild(meta);
-        div.appendChild(playBtn);
-        resultsContainer.appendChild(div);
+// --- YouTube player ---
+const API_KEY = 'YOUR_API_KEY_HERE';
+
+function extractVideoId(urlOrId){
+  if(!urlOrId) return null;
+  try{
+    const url = new URL(urlOrId);
+    if(url.hostname.includes('youtu.be')) return url.pathname.slice(1);
+    if(url.searchParams.get('v')) return url.searchParams.get('v');
+  }catch(e){}
+  const idRegex = /([a-zA-Z0-9_-]{11})/;
+  const match = urlOrId.match(idRegex);
+  return match ? match[1] : null;
+}
+
+function setPlayerVideo(videoId){
+  const iframe = document.getElementById('ytPlayer');
+  if(!videoId){ iframe.src=''; document.getElementById('currentTitle').textContent=''; return; }
+  iframe.src = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`;
+  if(API_KEY !== 'YOUR_API_KEY_HERE'){
+    fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${API_KEY}`)
+      .then(r=>r.json()).then(data=>{
+        if(data.items && data.items[0]) document.getElementById('currentTitle').textContent = data.items[0].snippet.title;
+      }).catch(()=>{});
+  }
+}
+
+// --- Кнопка Открыть видео ---
+document.getElementById('loadUrlBtn').addEventListener('click', ()=>{
+  const val = document.getElementById('urlInput').value.trim();
+  const vid = extractVideoId(val);
+  if(vid) setPlayerVideo(vid);
+  else alert('Не удалось извлечь ID видео из ссылки.');
+});
+
+// --- Поиск видео ---
+document.getElementById('searchBtn').addEventListener('click', ()=>{
+  const q = document.getElementById('searchInput').value.trim();
+  if(!q) return alert('Введите поисковый запрос.');
+  if(API_KEY==='YOUR_API_KEY_HERE') return alert('Введите API_KEY в коде, чтобы включить поиск.');
+  searchYouTube(q);
+});
+
+function searchYouTube(query){
+  const encoded = encodeURIComponent(query);
+  fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=6&q=${encoded}&key=${API_KEY}`)
+    .then(r=>r.json()).then(data=>{
+      const results = document.getElementById('results');
+      results.innerHTML='';
+      if(!data.items || data.items.length===0){ results.innerHTML='<div>Ничего не найдено</div>'; return; }
+      data.items.forEach(item=>{
+        const vid = item.id.videoId;
+        const thumb = item.snippet.thumbnails && item.snippet.thumbnails.medium ? item.snippet.thumbnails.medium.url : '';
+        const title = item.snippet.title;
+
+        const div = document.createElement('div'); div.className='result';
+        const img = document.createElement('img'); img.className='thumb'; img.src = thumb;
+        const meta = document.createElement('div'); meta.style.flex='1';
+        meta.innerHTML = `<div style="font-weight:700">${title}</div>`;
+        const playBtn = document.createElement('button'); playBtn.className='primary'; playBtn.textContent='Play';
+        playBtn.addEventListener('click', ()=> setPlayerVideo(vid));
+
+        div.appendChild(img); div.appendChild(meta); div.appendChild(playBtn);
+        results.appendChild(div);
       });
-    })
-    .catch(()=>alert("Ошибка поиска"));
-});
+    }).catch(err=>{ console.error(err); alert('Ошибка поиска. Проверьте API_KEY и соединение.'); });
+}
 
-// ====== ПОДДЕРЖКА ?v=ID В URL ======
-(function(){
-  const params = new URLSearchParams(window.location.search);
-  const v = params.get("v");
-  if(v) setPlayerVideo(v);
-})();
+// --- Enter для поиска или загрузки ---
+document.getElementById('urlInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loadUrlBtn').click(); });
+document.getElementById('searchInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('searchBtn').click(); });
