@@ -1,35 +1,39 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Finger Drawing on Camera</title>
+  <title>Finger Drawing</title>
   <style>
     body { margin: 0; overflow: hidden; background: black; }
-    video, canvas { position: absolute; top: 0; left: 0; }
+    video, canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 </head>
 <body>
-  <video id="video" autoplay playsinline></video>
-  <canvas id="output"></canvas>  <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('output');
-    const ctx = canvas.getContext('2d');
+  <video class="input_video" autoplay muted playsinline></video>
+  <canvas class="output_canvas"></canvas>
 
-    // Resize canvas when window resizes
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resize);
-    resize();
+  <script>
+    const videoElement = document.querySelector('.input_video');
+    const canvasElement = document.querySelector('.output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
 
     let drawing = false;
-    let lastX = null, lastY = null;
+    let lastX, lastY;
+
+    function distance(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    }
 
     const hands = new Hands({
-      locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
 
     hands.setOptions({
@@ -40,53 +44,47 @@
     });
 
     hands.onResults(results => {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvasCtx.save();
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      if (results.multiHandLandmarks.length > 0) {
         const landmarks = results.multiHandLandmarks[0];
 
-        // Thumb tip = 4, Index finger tip = 8
+        // большой (4) и указательный (8)
         const thumb = landmarks[4];
         const index = landmarks[8];
 
-        const x = index.x * canvas.width;
-        const y = index.y * canvas.height;
+        const d = distance(thumb, index);
 
-        const dist = Math.hypot(
-          (thumb.x - index.x) * canvas.width,
-          (thumb.y - index.y) * canvas.height
-        );
-
-        if (dist < 40) {
-          // Pinch detected → draw
+        if (d < 0.05) { // пальцы касаются
+          const x = index.x * canvasElement.width;
+          const y = index.y * canvasElement.height;
           if (!drawing) {
             drawing = true;
-            lastX = x;
-            lastY = y;
+            lastX = x; lastY = y;
           }
-          ctx.beginPath();
-          ctx.strokeStyle = 'red';
-          ctx.lineWidth = 5;
-          ctx.moveTo(lastX, lastY);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-          lastX = x;
-          lastY = y;
+          canvasCtx.beginPath();
+          canvasCtx.moveTo(lastX, lastY);
+          canvasCtx.lineTo(x, y);
+          canvasCtx.strokeStyle = 'red';
+          canvasCtx.lineWidth = 5;
+          canvasCtx.stroke();
+          lastX = x; lastY = y;
         } else {
           drawing = false;
-          lastX = null;
-          lastY = null;
         }
       }
+      canvasCtx.restore();
     });
 
-    const camera = new Camera(video, {
+    const camera = new Camera(videoElement, {
       onFrame: async () => {
-        await hands.send({image: video});
+        await hands.send({image: videoElement});
       },
       width: 1280,
       height: 720
     });
     camera.start();
-  </script></body>
+  </script>
+</body>
 </html>
