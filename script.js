@@ -116,7 +116,7 @@ loadUrlBtn.addEventListener('click', () => {
 });
 
 // --- Поиск видео по YouTube API ---
-const API_KEY = "ВАШ_API_KEY"; // вставь свой ключ
+const API_KEY = "AIzaSyCgL1GFZltpURrlV_U2DWyH-8XT_h6tr8U"; // вставь свой ключ
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
 const resultsDiv = document.getElementById('results');
