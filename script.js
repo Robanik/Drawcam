@@ -84,7 +84,7 @@ navSettings.addEventListener('click', () => {
   navSettings.classList.add('active');
 });
 
-// --- Настройки видео ---
+// --- Настройки видео (обманка) ---
 const fpsRange = document.getElementById('fpsRange');
 const fpsValue = document.getElementById('fpsValue');
 const mbpsRange = document.getElementById('mbpsRange');
@@ -108,7 +108,6 @@ loadUrlBtn.addEventListener('click', () => {
   const url = urlInput.value.trim();
   if (!url) return alert('Введите ссылку на видео!');
   let videoId;
-  // Разбор ID видео из ссылки YouTube
   const match = url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})/);
   if (match) videoId = match[1];
   else return alert('Неверная ссылка YouTube!');
@@ -116,26 +115,41 @@ loadUrlBtn.addEventListener('click', () => {
   currentTitle.textContent = `Смотрим видео: ${videoId}`;
 });
 
-// --- Поиск видео по названию (только пример, без API) ---
+// --- Поиск видео по YouTube API ---
+const API_KEY = "ВАШ_API_KEY"; // вставь свой ключ
 const searchInput = document.getElementById('searchInput');
 const searchBtn = document.getElementById('searchBtn');
 const resultsDiv = document.getElementById('results');
 
-searchBtn.addEventListener('click', () => {
+searchBtn.addEventListener('click', async () => {
   const query = searchInput.value.trim();
   if (!query) return alert('Введите название для поиска!');
-  // Псевдо-результаты (только пример)
-  resultsDiv.innerHTML = '';
-  for (let i=1; i<=5; i++) {
-    const videoId = 'dQw4w9WgXcQ'; // пример ID
-    const div = document.createElement('div');
-    div.className = 'result';
-    div.innerHTML = `<img class="thumb" src="https://img.youtube.com/vi/${videoId}/0.jpg">
-                     <div>${query} пример ${i}</div>`;
-    div.addEventListener('click', () => {
-      ytPlayer.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&vq=${qualitySelect.value}`;
-      currentTitle.textContent = `Смотрим видео: ${query} пример ${i}`;
+
+  resultsDiv.innerHTML = 'Загрузка...';
+
+  try {
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${API_KEY}`);
+    const data = await response.json();
+
+    resultsDiv.innerHTML = '';
+    data.items.forEach(item => {
+      const videoId = item.id.videoId;
+      const title = item.snippet.title;
+      const thumb = item.snippet.thumbnails.medium.url;
+
+      const div = document.createElement('div');
+      div.className = 'result';
+      div.innerHTML = `<img class="thumb" src="${thumb}"><div>${title}</div>`;
+
+      div.addEventListener('click', () => {
+        ytPlayer.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&vq=${qualitySelect.value}`;
+        currentTitle.textContent = title;
+      });
+
+      resultsDiv.appendChild(div);
     });
-    resultsDiv.appendChild(div);
+  } catch (err) {
+    console.error(err);
+    resultsDiv.innerHTML = 'Ошибка поиска!';
   }
 });
